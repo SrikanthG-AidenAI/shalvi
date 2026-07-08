@@ -102,6 +102,9 @@ jobs:
             exit 1
           fi
           echo "Healthy."
+          # Redeploy cleanup: drop the previous image now that the new one is healthy.
+          if [ -n "$PREV" ] && [ "$PREV" != "$IMG" ]; then docker rmi "$PREV" 2>/dev/null || true; fi
+          docker image prune -f >/dev/null 2>&1 || true
           REOF
           REMOTE_B64=$(base64 -w0 remote.sh)
           CMD_ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name "AWS-RunShellScript" --comment "AIDAP deploy $NAME" --parameters commands="echo $REMOTE_B64 | base64 -d | bash" --query "Command.CommandId" --output text)
