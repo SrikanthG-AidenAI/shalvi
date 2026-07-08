@@ -60,14 +60,31 @@ jobs:
     runs-on: ubuntu-latest     # use a self-hosted in-VPC runner for private IPs
     steps:
       - name: SSH setup
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST_IN: ${{ inputs.host }}
+          USER_IN: ${{ inputs.ssh_user }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          HOST="${{ inputs.host || secrets.DEPLOY_HOST }}"
-          USER="${{ inputs.ssh_user || secrets.SSH_USER }}"
+          # Write the key EXACTLY: strip any CR (Windows) and guarantee a trailing newline.
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy >/dev/null 2>&1; then
+            echo "::error::SSH_PRIVATE_KEY is not a valid private key. Paste the FULL key incl. the BEGIN/END lines and real newlines (an OpenSSH or PEM key), then re-run."
+            exit 1
+          fi
+          HOST="${HOST_IN:-$DEPLOY_HOST}"; USER="${USER_IN:-$SSH_USER}"
+          if [ -z "$HOST" ] || [ -z "$USER" ]; then
+            echo "::error::DEPLOY_HOST and/or SSH_USER are not set. Add them as repo secrets (or pass host/ssh_user inputs)."
+            exit 1
+          fi
           echo "HOST=$HOST" >> "$GITHUB_ENV"
           echo "USER=$USER" >> "$GITHUB_ENV"
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "SSH key loaded; target $USER@$HOST"
       - name: Deploy container (zero-downtime swap + health check)
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
