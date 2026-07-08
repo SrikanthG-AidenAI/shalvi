@@ -14,7 +14,7 @@ import FinalCTA from './components/FinalCTA.jsx'
 import Footer from './components/Footer.jsx'
 import useReveal from './hooks/useReveal.js'
 
-export default function App() {
+export default function App() { 
   useReveal()
 
   useEffect(() => {
