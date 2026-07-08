@@ -9,13 +9,13 @@ on:
       environment:  { description: "Target environment", required: true, default: "development" }
       host:         { description: "Target server host/ip (optional; falls back to DEPLOY_HOST secret)", required: false, default: "" }
       ssh_user:     { description: "SSH login user (optional; falls back to SSH_USER secret)", required: false, default: "" }
-      container:    { description: "Container name on the host", required: false, default: "Shalvi app" }
+      container:    { description: "Container name on the host", required: false, default: "shalvi-app" }
       port:         { description: "Host port to publish the app on", required: false, default: "8000" }
       health_path:  { description: "HTTP health path", required: false, default: "/health" }
       rollback:     { description: "Is this a rollback run?", required: false, default: "false" }
 
 concurrency:
-  group: deploy-Shalvi app-${{ inputs.environment }}
+  group: deploy-shalvi-app-${{ inputs.environment }}
   cancel-in-progress: false
 
 env:
@@ -30,8 +30,9 @@ jobs:
     outputs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
     steps:
-      - uses: actions/checkout@v3
-        with: { ref: ${{ inputs.version }} }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -69,6 +70,9 @@ jobs:
           echo "USER=$USER" >> "$GITHUB_ENV"
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
       - name: Deploy container (zero-downtime swap + health check)
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           SSH="ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new $USER@$HOST"
@@ -77,12 +81,11 @@ jobs:
           # Remember the currently running image so we can roll back.
           PREV=$($SSH "docker inspect --format '{{.Config.Image}}' $NAME 2>/dev/null" || echo "")
           echo "previous image: ${PREV:-none}"
-          $SSH "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+          $SSH "echo '$GHCR_TOKEN' | docker login ghcr.io -u ${{ github.actor }} --password-stdin"
           $SSH "docker pull $IMG"
-          # Write runtime env (optional APP_ENV secret) then swap the container.
-          $SSH "cat > /tmp/$NAME.env <<'ENVEOF'
-${{ secrets.APP_ENV }}
-ENVEOF"
+          # Runtime env: write locally (no heredoc indentation issues) then copy over.
+          printf '%s\n' "$APP_ENV" > app.env
+          scp -i ~/.ssh/id_deploy app.env "$USER@$HOST:/tmp/$NAME.env"
           $SSH "docker rm -f $NAME 2>/dev/null || true"
           $SSH "docker run -d --name $NAME --restart unless-stopped --env-file /tmp/$NAME.env -p ${PORT}:${PORT} $IMG"
           echo "PREV_IMAGE=$PREV" >> "$GITHUB_ENV"
