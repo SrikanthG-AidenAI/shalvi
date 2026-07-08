@@ -11,7 +11,7 @@ on:
       environment:  { description: "Target environment", required: false, default: "demo" }
       instance_id:  { description: "Target EC2 instance id (falls back to INSTANCE_ID secret)", required: false, default: "" }
       container:    { description: "Container name on the host", required: false, default: "shalvi-app" }
-      port:         { description: "Host port to publish the app on", required: false, default: "8000" }
+      port:         { description: "Host port to publish the app on", required: false, default: "3000" }
       health_path:  { description: "HTTP health path", required: false, default: "/health" }
 
 concurrency:
@@ -69,7 +69,7 @@ jobs:
           IMG: ${{ needs.build.outputs.image_ref }}
           INSTANCE_ID: ${{ inputs.instance_id || secrets.INSTANCE_ID }}
           NAME: ${{ inputs.container || 'shalvi-app' }}
-          PORT: ${{ inputs.port || '8000' }}
+          PORT: ${{ inputs.port || '3000' }}
           HEALTH_PATH: ${{ inputs.health_path || '/health' }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
